@@ -7,7 +7,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.RawRes;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.AppCompatButton;
 import android.util.Log;
+import android.view.View;
 import android.view.WindowManager;
 
 import org.opencv.android.BaseLoaderCallback;
@@ -16,15 +18,12 @@ import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
-import org.opencv.core.Point;
 import org.opencv.core.Rect;
-import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
+import org.opencv.videoio.VideoCapture;
 import org.opencv.videoio.VideoWriter;
 
 import java.io.File;
@@ -32,12 +31,15 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import static org.opencv.core.CvType.CV_8UC3;
+import static org.opencv.core.CvType.CV_8UC4;
 
 public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
 
     private static final String TAG = MainActivity.class.getSimpleName();
 
+    private AppCompatButton btnApply;
+    private AppCompatButton btnRecord;
+    private boolean toApplyLense = false;
     private VideoWriter videoWriter;
     private File externalStoragePublicDirectory;
     private Mat rgba;
@@ -68,7 +70,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         loadOpenCv();
     }
 
-
+    private VideoCapture camera;
 
     private static void loadOpenCv() {
         if (OpenCVLoader.initDebug()) {
@@ -85,26 +87,31 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
 
-        decoration = BitmapFactory.decodeResource(getResources(), R.drawable.fire);
+        btnApply = (AppCompatButton) findViewById(R.id.btnApply);
+        btnRecord = (AppCompatButton) findViewById(R.id.btnRecord);
+        btnApply.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                toApplyLense = !toApplyLense;
+            }
+        });
+        camera = new VideoCapture(0);
+        decoration = BitmapFactory.decodeResource(getResources(), R.drawable.hypno);
         decorationMat = bitmapToMat(decoration);
-        // Example of a call to a native method
         cameraView = (JavaCameraView) findViewById(R.id.cameraView);
         cameraView.setCvCameraViewListener(this);
+        cameraView.setMaxFrameSize(800, 600);
         externalStoragePublicDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-//        VideoCapture videoCapture = new VideoCapture(externalStoragePublicDirectory.getAbsolutePath());
-//        int width = (int) videoCapture.get(CAP_PROP_FRAME_WIDTH);
-//        int height = (int) videoCapture.get(CAP_PROP_FRAME_HEIGHT);
-//        VideoWriter.fourcc("mp4v");
         videoWriter = new VideoWriter();
-
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (cameraView != null) {
+        if (cameraView != null && videoWriter != null && camera != null) {
             cameraView.disableView();
             videoWriter.release();
+            camera.release();
         }
     }
 
@@ -113,7 +120,12 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         faceClassfier = initCascadeClassifier(R.raw.frontal_cascade_alt, "face_cascade");
         // And we are ready to go
         cameraView.enableView();
-        videoWriter.open(externalStoragePublicDirectory.getAbsolutePath() + "/test.avi", VideoWriter.fourcc('M', 'J', 'P', 'G'), 20, new Size(400, 400));
+        videoWriter.open(externalStoragePublicDirectory.getAbsolutePath() + "/test.avi",
+                VideoWriter.fourcc('D', 'I', 'V', 'X'),
+                15,
+                new Size(800, 600),
+                true);
+        camera.open(0);
     }
 
     private CascadeClassifier initCascadeClassifier(@RawRes int res, String fileName) {
@@ -157,7 +169,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     public void onCameraViewStarted(int width, int height) {
-        rgba = new Mat(height, width, CV_8UC3);
+        rgba = new Mat(height, width, CV_8UC4);
     }
 
     @Override
@@ -169,41 +181,39 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         rgba = inputFrame.rgba();
-        Core.flip(rgba, rgba, 1);
-        Mat resizeImage = new Mat();
-        Size sz = new Size(400, 400);
-        Imgproc.resize(rgba, resizeImage, sz);
 
         int height = rgba.rows();
-        double factor = 0.5;
+        double factor = 0.1;
         if (Math.round(height * factor) > 0) {
             absoluteFaceSize = (int) Math.round(height * factor);
         }
-        
-        MatOfRect eyesDetections = new MatOfRect();
-        if (eyesClassifier != null)
-            eyesClassifier.detectMultiScale(resizeImage, eyesDetections, 1.1, 1, 2, new Size(absoluteFaceSize, absoluteFaceSize), new Size());
-//
-//        System.out.println(String.format("Detected %s faces", faceDetections.toArray().length));
-//        // Draw a bounding box around each face.
-//        for (Rect rect : faceDetections.toArray()) {
-//            Imgproc.rectangle(rgba, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0, 255, 0));
-//        }
-//
-        for (Rect rect : eyesDetections.toArray()) {
-            Imgproc.circle(resizeImage, new Point(rect.x + rect.width / 2, rect.y + rect.height / 2), 10, new Scalar(0, 255, 0));
+
+        if (toApplyLense) {
+            MatOfRect eyesDetections = new MatOfRect();
+            if (eyesClassifier != null) {
+                eyesClassifier.detectMultiScale(rgba, eyesDetections, 1.1, 1, 2, new Size(absoluteFaceSize, absoluteFaceSize), new Size());
+//            eyesClassifier.detectMultiScale(rgba, eyesDetections);
+            }
+
+            for (Rect eyesRect : eyesDetections.toArray()) {
+                Mat subMat = rgba.submat(new Rect((int) eyesRect.tl().x, (int) eyesRect.tl().y, decorationMat.cols(), decorationMat.rows()));
+                decorationMat.copyTo(subMat);
+//            overlayImage(rgba, subMat);
+            }
         }
 
         if (videoWriter.isOpened()) {
-            videoWriter.write(resizeImage);
+            videoWriter.write(rgba);
         }
-        return resizeImage;
+        return rgba;
     }
 
     private Mat bitmapToMat(Bitmap bitmap) {
-        Mat mat = new Mat();
+        Mat mat = new Mat(bitmap.getWidth(), bitmap.getHeight(), CV_8UC4);
         Bitmap bmp32 = bitmap.copy(Bitmap.Config.ARGB_8888, true);
         Utils.bitmapToMat(bmp32, mat);
         return mat;
     }
+
+
 }

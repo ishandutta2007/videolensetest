@@ -11,4 +11,20 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/btnRecord"
+        android:layout_width="150dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|left"
+        android:layout_marginBottom="20dp"
+        android:text="Record" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/btnApply"
+        android:layout_width="150dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|right"
+        android:layout_marginBottom="20dp"
+        android:text="Apply" />
+
 </FrameLayout>
