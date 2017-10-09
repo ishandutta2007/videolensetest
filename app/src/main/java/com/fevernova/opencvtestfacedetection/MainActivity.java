@@ -26,7 +26,6 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
-import org.opencv.videoio.VideoCapture;
 import org.opencv.videoio.VideoWriter;
 
 import java.io.File;
@@ -42,22 +41,21 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private static final String TAG = MainActivity.class.getSimpleName();
 
     private boolean toApplyLense = false;
-    private boolean isRecording = true;
+    private boolean isRecording = false;
     private AppCompatButton btnApply;
     private AppCompatButton btnRecord;
     private VideoWriter videoWriter;
     private File externalStoragePublicDirectory;
-    private Mat rgba;
+    private Mat mainFrame;
     private Mat decorationMat;
     private MatOfRect eyesDetections;
-    private CascadeClassifier eyesClassifier;
     private Bitmap decoration;
+    private CascadeClassifier eyesClassifier;
     private CascadeClassifier faceClassfier;
     private int absoluteFaceSize = 0;
     private JavaCameraView cameraView;
-    private int maxWidth;
-    private int maxHeight;
-    private VideoCapture camera;
+    private int frameWidth;
+    private int frameHeight;
     private BaseLoaderCallback loaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -77,7 +75,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         System.loadLibrary("native-lib");
         loadOpenCv();
     }
-
 
     private static void loadOpenCv() {
         if (OpenCVLoader.initDebug()) {
@@ -106,40 +103,43 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             @Override
             public void onClick(View v) {
                 isRecording = !isRecording;
+                if (isRecording) {
+                    btnRecord.setText("Recording...");
+                } else {
+                    btnRecord.setText("Record");
+                }
             }
         });
 
         externalStoragePublicDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-        camera = new VideoCapture(0);
         decoration = BitmapFactory.decodeResource(getResources(), R.drawable.hypno);
         decorationMat = bitmapToMat(decoration);
         cameraView = (JavaCameraView) findViewById(R.id.cameraView);
         cameraView.setCvCameraViewListener(this);
-        maxWidth = 800;
-        maxHeight = 600;
-        cameraView.setMaxFrameSize(maxWidth, maxHeight);
+        frameWidth = 800;
+        frameHeight = 600;
+        cameraView.setMaxFrameSize(frameWidth, frameHeight);
         videoWriter = new VideoWriter();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (cameraView != null && videoWriter != null && camera != null) {
+        if (cameraView != null && videoWriter != null) {
             cameraView.disableView();
             videoWriter.release();
-            camera.release();
         }
     }
 
     private void initializeOpenCVDependencies() {
         eyesClassifier = initCascadeClassifier(R.raw.eyes_cascade, "eyes_cascade");
         faceClassfier = initCascadeClassifier(R.raw.frontal_cascade_alt, "face_cascade");
-        // And we are ready to go
         cameraView.enableView();
+        int frameRate = 15;
         videoWriter.open(externalStoragePublicDirectory.getAbsolutePath() + (System.currentTimeMillis() / 1000) + ".avi",
                 VideoWriter.fourcc('M', 'J', 'P', 'G'),
-                15,
-                new Size(maxWidth, maxHeight),
+                frameRate,
+                new Size(frameWidth, frameHeight),
                 true);
     }
 
@@ -159,7 +159,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             e.printStackTrace();
         }
         // Load the cascade classifier
-        cascadeClassifier = new CascadeClassifier(cascadeFile.getAbsolutePath());
+        cascadeClassifier = new CascadeClassifier();
         cascadeClassifier.load(cascadeFile.getAbsolutePath());
         if (cascadeClassifier.empty()) {
             Log.e(TAG, "Failed to load cascade classifier");
@@ -183,24 +183,25 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     @Override
     public void onCameraViewStarted(int width, int height) {
-        rgba = new Mat(height, width, CV_8UC3);
+        mainFrame = new Mat(height, width, CV_8UC3);
         Log.d(TAG, "onCameraViewStarted: cameraHeight = " + height + " / cameraWidth = " + width);
     }
 
     @Override
     public void onCameraViewStopped() {
-        if (rgba != null) {
-            rgba.release();
+        if (mainFrame != null) {
+            mainFrame.release();
         }
     }
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        rgba = inputFrame.rgba();
-        int height = rgba.rows();
+        mainFrame = inputFrame.rgba();
+        int height = mainFrame.rows();
         //use these to decrease/increase area of face detection -> impacts fps
         double sizeFactor = 0.05;
         int scaleFactor = 2;
+
         if (Math.round(height * sizeFactor) > 0) {
             absoluteFaceSize = (int) Math.round(height * sizeFactor);
         }
@@ -211,14 +212,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         //saved frame must match size set in video writer -> resize
         Mat toSaveFrame = new Mat();
-        Imgproc.resize(rgba, toSaveFrame, new Size(maxWidth, maxHeight));
+        Imgproc.resize(mainFrame, toSaveFrame, new Size(frameWidth, frameHeight ));
 
         if (videoWriter.isOpened() && isRecording) {
             videoWriter.write(toSaveFrame);
         }
 
         toSaveFrame.release();
-        return rgba;
+        return mainFrame;
     }
 
     private void applyOverlay(int scaleFactor) {
@@ -226,21 +227,27 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             eyesDetections = new MatOfRect();
         }
         //detect eyes in frame
-        //fixme shrink the image to improve perfomance?
         if (eyesClassifier != null) {
-            eyesClassifier.detectMultiScale(rgba, eyesDetections, scaleFactor, 1, 2,
+            eyesClassifier.detectMultiScale(mainFrame, eyesDetections, scaleFactor, 1, 2,
                     new Size(absoluteFaceSize, absoluteFaceSize), new Size());
         }
 
         //for each detection -> draw overlay
         for (Rect eyesRect : eyesDetections.toArray()) {
             try {
+                Log.d(TAG, "applyOverlay: width = " + eyesRect.width + " / height = " + eyesRect.height);
+                //resize mat to match eye detection rectangle
+                Mat toIncludeMat = new Mat();
+                Imgproc.resize(decorationMat, toIncludeMat, new Size(eyesRect.width, eyesRect.height));
+
                 // create submatrix where we insert our bitmap
-                Mat subMat = rgba.submat(new Rect((int) eyesRect.tl().x,
+                Mat subMat = mainFrame.submat(new Rect((int) eyesRect.tl().x,
                         (int) eyesRect.tl().y,
-                        decorationMat.cols(),
-                        decorationMat.rows()));
-                decorationMat.copyTo(subMat);
+                        toIncludeMat.cols(),
+                        toIncludeMat.rows()));
+                toIncludeMat.copyTo(subMat);
+
+                toIncludeMat.release();
                 subMat.release();
             } catch (CvException e) {
                 e.printStackTrace();
