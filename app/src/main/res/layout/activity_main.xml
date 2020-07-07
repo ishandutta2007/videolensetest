@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     tools:context="com.fevernova.opencvtestfacedetection.MainActivity">
 
-
     <org.opencv.android.JavaCameraView
         android:id="@+id/cameraView"
         android:layout_width="match_parent"

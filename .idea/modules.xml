@@ -2,9 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/OpenCvTestFaceDetection.iml" filepath="$PROJECT_DIR$/OpenCvTestFaceDetection.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
       <module fileurl="file://$PROJECT_DIR$/openCVLibrary330/openCVLibrary330.iml" filepath="$PROJECT_DIR$/openCVLibrary330/openCVLibrary330.iml" />
+      <module fileurl="file://$PROJECT_DIR$/videolensetest.iml" filepath="$PROJECT_DIR$/videolensetest.iml" />
     </modules>
   </component>
 </project>

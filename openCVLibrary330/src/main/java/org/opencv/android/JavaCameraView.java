@@ -1,7 +1,5 @@
 package org.opencv.android;
 
-import java.util.List;
-
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
@@ -17,6 +15,8 @@ import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
+
+import java.util.List;
 
 /**
  * This class is an implementation of the Bridge View between OpenCV and Java Camera.
@@ -74,16 +74,16 @@ public class JavaCameraView extends CameraBridgeViewBase implements PreviewCallb
 
             if (mCameraIndex == CAMERA_ID_ANY) {
                 Log.d(TAG, "Trying to open camera with old open()");
-                try {
-                    mCamera = Camera.open();
-                }
-                catch (Exception e){
-                    Log.e(TAG, "Camera is not available (in use or does not exist): " + e.getLocalizedMessage());
-                }
+//                try {
+//                    mCamera = Camera.open();
+//                }
+//                catch (Exception e){
+//                    Log.e(TAG, "Camera is not available (in use or does not exist): " + e.getLocalizedMessage());
+//                }
 
                 if(mCamera == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
                     boolean connected = false;
-                    for (int camIdx = 0; camIdx < Camera.getNumberOfCameras(); ++camIdx) {
+                    for (int camIdx = Camera.getNumberOfCameras()-1; camIdx >= 0 ; camIdx--) {
                         Log.d(TAG, "Trying to open camera with new open(" + Integer.valueOf(camIdx) + ")");
                         try {
                             mCamera = Camera.open(camIdx);
@@ -213,6 +213,12 @@ public class JavaCameraView extends CameraBridgeViewBase implements PreviewCallb
 
                     /* Finally we are ready to start the preview */
                     Log.d(TAG, "startPreview");
+
+                    Camera.Parameters parameters = mCamera.getParameters();
+                    parameters.set("orientation", "portrait");
+                    parameters.setRotation(90);
+                    mCamera.setParameters(parameters);
+
                     mCamera.startPreview();
                 }
                 else
